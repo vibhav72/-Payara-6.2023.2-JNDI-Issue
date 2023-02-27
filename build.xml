@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Project root build file. -->
+<project name="test-app">
+
+	<property environment="env" />
+	<property name="jeeServer.username" value="test-user" />
+	<dirname property="basedir" file="${ant.file}"/>		
+	
+	<path id="build.classpath">
+		<pathelement location="${env.GLASSFISH_HOME}/glassfish/modules/jakarta.ejb-api.jar" />
+		<pathelement location="${env.GLASSFISH_HOME}/glassfish/modules/jakarta.servlet-api.jar" />		
+	</path>
+	
+	<target name="compile">
+		<echo message="Compiling..." />
+		<javac destdir="${basedir}/build" classpathref="build.classpath" debug="true" source="17" target="17" >
+    		<src path="${basedir}/src" />            
+		</javac>		
+		
+		<echo message="Copying core files..." />
+        <copy todir="${basedir}/app-ejb">                            
+             <fileset dir="${basedir}/build">
+                <include name="**/ejb/*" />
+            </fileset>
+        </copy>
+		
+		 <copy todir="${basedir}/app-web/WEB-INF/classes">                            
+             <fileset dir="${basedir}/build">
+                <include name="**/web/*" />
+				<include name="**/TestSessionBeanRemote.*" />
+            </fileset>
+        </copy>				
+	</target>			
+	
+	<target name="setup">               
+
+        <!-- Delete the servers -->
+        <echo message="Stopping the application server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">   
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="stop-instance" />
+            <arg value="applicationServer" />
+        </exec>
+
+        <echo message="Stopping the web server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="stop-instance" />
+            <arg value="webServer" />
+        </exec>
+
+        <echo message="Stopping the admin server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+            <arg value="stop-domain" />
+            <arg value="test" />
+        </exec>
+
+        <echo message="Deleting the application and web servers..." />
+        <delete dir="${env.GLASSFISH_HOME}/glassfish/nodes/localhost-test" />
+
+        <echo message="Deleting the admin server..." />
+        <delete dir="${env.GLASSFISH_HOME}/glassfish/domains/test" />
+
+        <!-- Create the domain -->
+        <echo message="Creating the admin server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">                        
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+			<arg value="create-domain" />
+            <arg value="--adminport" />
+            <arg value="4848" />
+            <arg value="--instanceport" />
+            <arg value="800" />
+            <arg value="--domainproperties" />
+            <arg value="orb.listener.port=3705:jms.port=7677" />
+            <arg value="test" />
+        </exec>
+
+        <!-- Start the admin server -->
+        <echo message="Starting the admin server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+            <arg value="start-domain" />
+            <arg value="--debug" />
+            <arg value="true" />
+            <arg value="test" />
+        </exec>
+
+        <sequential>
+            <!-- Wait for the admin server to become available before we continue -->
+            <waitfor>
+                <socket server="localhost" port="4848" />
+            </waitfor>
+        </sequential>
+
+        <!-- Create the Application Server -->
+        <echo message="Creating the application server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="create-instance" />
+            <arg value="--node" />
+            <arg value="localhost-test" />
+            <arg value="--systemproperties" />
+            <arg value="IIOP_LISTENER_PORT=7001:HTTP_LISTENER_PORT=7000:JMS_PROVIDER_PORT=7676" />
+            <arg value="applicationServer" />
+        </exec>
+
+        <!-- Create the Web Server -->
+        <echo message="Creating the web server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="create-instance" />
+            <arg value="--node" />
+            <arg value="localhost-test" />
+            <arg value="--systemproperties" />
+            <arg value="HTTP_LISTENER_PORT=8080:JMS_PROVIDER_PORT=7678" />
+            <arg value="webServer" />
+        </exec>
+
+        <!-- Start the application server -->
+        <echo message="Starting the application server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="start-instance" />
+            <arg value="--debug" />
+            <arg value="true" />
+            <arg value="applicationServer" />
+        </exec>
+
+        <!-- Start the web server -->
+        <echo message="Starting the web server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/bin/asadmin.bat">
+			<arg value="--user" />
+            <arg value="${jeeServer.username}" />
+            <arg value="--passwordfile" />
+            <arg value="${basedir}/server_password.txt" />
+            <arg value="start-instance" />
+            <arg value="--debug" />
+            <arg value="true" />
+            <arg value="webServer" />
+        </exec>
+
+        <!--
+            Wait for the application and web servers
+            to become available before we continue.
+
+            Note the application server's port is HTTP 7000.
+        -->
+        <waitfor>
+            <and>
+                <socket server="localhost" port="8080" />
+                <socket server="localhost" port="7000" />
+            </and>
+        </waitfor>
+
+        <antcall target="shutdown" inheritAll="true" />
+
+    </target>
+	
+	
+	<target name="shutdown" description="Shuts down the server">		
+
+        <!-- Stop the application server -->
+        <echo message="Stopping the application server..." />
+        <exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+            <arg value="stop-local-instance" />
+			<arg value="--node" />
+            <arg value="localhost-test" />
+            <arg value="applicationServer" />
+        </exec>
+
+        <!-- Stop the web server -->
+        <echo message="Stopping the web server..." />
+        <exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+            <arg value="stop-local-instance" />
+			<arg value="--node" />
+            <arg value="localhost-test" />
+            <arg value="webServer" />
+        </exec>
+
+        <!-- Stop the admin server -->
+        <echo message="Stopping the admin server..." />
+        <exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+            <arg value="stop-domain" />
+            <arg value="test" />
+        </exec>
+
+    </target>
+		
+	<target name="deploy">
+	
+		<!-- Start the admin server -->
+        <echo message="Starting the admin server..." />
+        <exec dir="${env.GLASSFISH_HOME}/bin" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+            <arg value="start-domain" />
+            <arg value="--debug" />
+            <arg value="true" />
+            <arg value="test" />
+        </exec>
+
+        <!-- Wait for the admin server to become available before we continue -->
+        <waitfor>
+            <socket server="localhost" port="4848" />
+        </waitfor>
+
+        <!-- Start the application and web servers at the same time -->
+        <parallel>
+            <!-- Start the application server -->
+            <echo message="Starting the application server..." />
+            <exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+                <arg value="start-local-instance" />
+                <arg value="--debug" />
+                <arg value="true" />
+                <arg value="--sync" />
+				<arg value="none" />
+				<arg value="--node" />
+				<arg value="localhost-test" />			               
+                <arg value="applicationServer" />
+            </exec>
+
+            <!-- Start the web server -->
+            <echo message="Starting the web server..." />
+            <exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+                <arg value="start-local-instance" />
+                <arg value="--debug" />
+                <arg value="true" />
+                <arg value="--sync" />
+                <arg value="none" />
+				<arg value="--node" />
+				<arg value="localhost-test" />
+                <arg value="webServer" />
+            </exec>
+        </parallel>
+	
+	
+		<!--
+            Wait for the application and web servers
+            to become available before we continue.
+
+            Note the application server's port is HTTP 7000.
+        -->
+        <waitfor>
+            <and>
+                <socket server="localhost" port="8080" />
+                <socket server="localhost" port="7000" />
+            </and>
+        </waitfor>
+		
+		<echo message="Rotating log files..." />
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="rotate-log" />
+		</exec>
+
+		<echo message="Rotating log files..." />
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="rotate-log" />
+			<arg value="--target" />
+			<arg value="applicationServer" />
+		</exec>
+
+		<echo message="Rotating log files..." />
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="rotate-log" />
+			<arg value="--target" />
+			<arg value="webServer" />
+		</exec>
+		
+		<echo message="Undeploying the application..." />
+		<!-- Undeploy from the web server -->
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="undeploy" />
+			<arg value="--target" />
+			<arg value="webServer" />
+			<arg value="app-web" />
+		</exec>
+
+		<!-- Undeploy from the application server -->
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="undeploy" />
+			<arg value="--target" />
+			<arg value="applicationServer" />
+			<arg value="app-ejb" />
+		</exec>
+	
+		<!-- Deploy to the application server -->
+		<echo message="Deploying the application (app)..." />
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="deploy" />
+			<arg value="--force=true" />
+			<arg value="--upload=false" />
+			<arg value="--target" />
+			<arg value="applicationServer" />
+			<arg value="${basedir}/app-ejb" />
+		</exec>
+
+		<!-- Deploy to the web server -->
+		<echo message="Deploying the application (web)..." />
+		<exec dir="${env.GLASSFISH_HOME}/glassfish/lib" executable="${env.GLASSFISH_HOME}/glassfish/lib/nadmin.bat">
+			<arg value="--user" />
+			<arg value="${jeeServer.username}" />
+			<arg value="--passwordfile" />
+			<arg value="${basedir}/server_password.txt" />
+			<arg value="deploy" />
+			<arg value="--force=true" />
+			<arg value="--upload=false" />
+			<arg value="--target" />
+			<arg value="webServer" />
+			<arg value="${basedir}/app-web" />
+		</exec>
+			
+	</target>			
+	
+</project>
